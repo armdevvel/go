@@ -196,8 +196,14 @@ func EnableFIPS() bool {
 	// Perhaps the default should be changed back to -buildmode=exe,
 	// after which we could remove this case, but until then,
 	// skip FIPS on windows-386.
-	if buildcfg.GOOS == "windows" && buildcfg.GOARCH == "386" {
-		return false
+	//
+	// We don't know whether arm works, because it is too hard to get builder
+	// time to test it. Disable since it's not important right now.
+	if buildcfg.GOOS == "windows" {
+		switch buildcfg.GOARCH {
+		case "386", "arm":
+			return false
+		}
 	}
 
 	// AIX doesn't just work, and it's not worth fixing.
