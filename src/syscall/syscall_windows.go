@@ -14,6 +14,7 @@ import (
 	"internal/msan"
 	"internal/oserror"
 	"internal/race"
+	"runtime"
 	"sync"
 	"unsafe"
 )
@@ -524,8 +525,18 @@ func setFilePointerEx(handle Handle, distToMove int64, newFilePointer *int64, wh
 	if unsafe.Sizeof(uintptr(0)) == 8 {
 		_, _, e1 = Syscall6(procSetFilePointerEx.Addr(), 4, uintptr(handle), uintptr(distToMove), uintptr(unsafe.Pointer(newFilePointer)), uintptr(whence), 0, 0)
 	} else {
-		// distToMove is a LARGE_INTEGER, which is 64 bits.
-		_, _, e1 = Syscall6(procSetFilePointerEx.Addr(), 5, uintptr(handle), uintptr(distToMove), uintptr(distToMove>>32), uintptr(unsafe.Pointer(newFilePointer)), uintptr(whence), 0)
+		// Different 32-bit systems disgaree about whether distToMove starts 8-byte aligned.
+		switch runtime.GOARCH {
+		default:
+			panic("unsupported 32-bit architecture")
+		case "386":
+			// distToMove is a LARGE_INTEGER, which is 64 bits.
+			_, _, e1 = Syscall6(procSetFilePointerEx.Addr(), 5, uintptr(handle), uintptr(distToMove), uintptr(distToMove>>32), uintptr(unsafe.Pointer(newFilePointer)), uintptr(whence), 0)
+		case "arm":
+			// distToMove must be 8-byte aligned per ARM calling convention
+			// https://docs.microsoft.com/en-us/cpp/build/overview-of-arm-abi-conventions#stage-c-assignment-of-arguments-to-registers-and-stack
+			_, _, e1 = Syscall6(procSetFilePointerEx.Addr(), 6, uintptr(handle), 0, uintptr(distToMove), uintptr(distToMove>>32), uintptr(unsafe.Pointer(newFilePointer)), uintptr(whence))
+		}
 	}
 	if e1 != 0 {
 		return errnoErr(e1)
